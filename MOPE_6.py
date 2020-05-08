@@ -1,225 +1,345 @@
-import random
-import numpy
-import math
-from scipy.stats import t,f
+  
+from copy import deepcopy
+from math import sqrt
+from random import random
+
+import numpy as np
+from prettytable import PrettyTable
+
+x1_min = -25
+x1_max = -5
+x2_min = 10
+x2_max = 60
+x3_min = -5
+x3_max = 60
+
+koefs = [0.2, 6.7, 6.3, 7.3, 8.3, 0.1, 6.7, 8.8, 5.7, 1, 3.4]  # Koefs for search y
+x_average_max = (x1_max + x2_max + x3_max) / 3
+x_average_min = (x1_min + x2_min + x3_min) / 3
+y_max = 200 + x_average_max
+y_min = 200 + x_average_min
 
 
-def table_student(prob, n, m):
-    x_vec = [i*0.0001 for i in range(int(5/0.0001))]
-    par = 0.5 + prob/0.1*0.05
-    f3 = (m - 1) * n
-    for i in x_vec:
-        if abs(t.cdf(i, f3) - par) < 0.000005:
-            return i
+def replace_column(list_: list, column, list_replace):
+    list_ = deepcopy(list_)
+    for i in range(len(list_)):
+        list_[i][column] = list_replace[i]
+    return list_
 
 
-def table_fisher(prob, n, m, d):
-    x_vec = [i*0.001 for i in range(int(10/0.001))]
-    f3 = (m - 1) * n
-    for i in x_vec:
-        if abs(f.cdf(i, n-d, f3)-prob) < 0.0001:
-            return i
+def append_to_list_x(x: list, variant: int):
+    if variant == 1:
+        for i in range(len(x)):
+            x[i].append(x[i][1] * x[i][2])
+            x[i].append(x[i][1] * x[i][3])
+            x[i].append(x[i][2] * x[i][3])
+            x[i].append(x[i][1] * x[i][2] * x[i][3])
+    if variant == 2:
+        for i in range(len(x)):
+            x[i].append(x[i][1] * x[i][2])
+            x[i].append(x[i][1] * x[i][3])
+            x[i].append(x[i][2] * x[i][3])
+            x[i].append(x[i][1] * x[i][2] * x[i][3])
+            x[i].append(x[i][1] * x[i][1])
+            x[i].append(x[i][2] * x[i][2])
+            x[i].append(x[i][3] * x[i][3])
+    for i in range(len(x)):
+        for j in range(len(x[i])):
+            if round(x[i][j], 3) == 0:
+                x[i][j] = 0
+            x[i][j] = round(x[i][j], 3)
 
 
-def combination_mul(arr):
-    return [
-        1, *arr,
-        round(arr[0]*arr[1], 3),
-        round(arr[0]*arr[2], 3),
-        round(arr[1]*arr[2], 3),
-        round(arr[0]*arr[1]*arr[2], 3),
-        round(arr[0]*arr[0], 3),
-        round(arr[1]*arr[1], 3),
-        round(arr[2]*arr[2], 3)
-    ]
+def get_value(table: dict, key: int):
+    value = table.get(key)
+    if value is not None:
+        return value
+    for i in table:
+        if type(i) == range and key in i:
+            return table.get(i)
 
+count_vzaemodiya = 0
+count_kvadr = 0
 
-def geny(n, m, f):
-    mat_y = [[round(sum([f[k] * combination_mul(x[i])[k] for k in range(11)]) + random.randint(0, 10) - 5, 2)
-              for j in range(m)]for i in range(n)]
-    return mat_y
+def main(m, n):
+    if n == 14:
+        const_l = 1.73
+        print(
+            'ŷ = b0 + b1 * x1 + b2 * x2 + b3 * x3 + b12 * x1 * x2 + b13 * x1 * x3 + b23 * x2 * x3 + b123 * x1 * x2 * '
+            'x3 + b11 * x1 * x1 + b22 * x2 * x2 + b33 * x3 * x3')
+        norm_x = [
+            [+1, -1, -1, -1],
+            [+1, -1, +1, +1],
+            [+1, +1, -1, +1],
+            [+1, +1, +1, -1],
+            [+1, -1, -1, +1],
+            [+1, -1, +1, -1],
+            [+1, +1, -1, -1],
+            [+1, +1, +1, +1],
+            [+1, -const_l, 0, 0],
+            [+1, const_l, 0, 0],
+            [+1, 0, -const_l, 0],
+            [+1, 0, const_l, 0],
+            [+1, 0, 0, -const_l],
+            [+1, 0, 0, const_l],
+        ]
 
+        delta_x1 = (x1_max - x1_min) / 2
+        delta_x2 = (x2_max - x2_min) / 2
+        delta_x3 = (x2_max - x3_min) / 2
+        x01 = (x1_min + x1_max) / 2
+        x02 = (x2_min + x2_max) / 2
+        x03 = (x3_min + x3_max) / 2
 
-def dispersion(array_y, array_y_average):
-    array_dispersion = []
+        x = [
+            [1, x1_min, x2_min, x3_min],
+            [1, x1_min, x2_max, x3_max],
+            [1, x1_max, x2_min, x3_max],
+            [1, x1_max, x2_max, x3_min],
+            [1, x1_min, x2_min, x3_max],
+            [1, x1_min, x2_max, x3_min],
+            [1, x1_max, x2_min, x3_min],
+            [1, x1_max, x2_max, x3_max],
+            [1, -const_l * delta_x1 + x01, x02, x03],
+            [1, const_l * delta_x1 + x01, x02, x03],
+            [1, x01, -const_l * delta_x2 + x02, x03],
+            [1, x01, const_l * delta_x2 + x02, x03],
+            [1, x01, x02, -const_l * delta_x3 + x03],
+            [1, x01, x02, const_l * delta_x3 + x03],
+        ]
 
-    for j in range(N):
-        array_dispersion.append(0)
-        for g in range(m):
-            array_dispersion[j] += (array_y[j][g] - array_y_average[j])**2
-        array_dispersion[j] /= m
-    return array_dispersion
+        append_to_list_x(norm_x, variant=2)
+        append_to_list_x(x, variant=2)
 
+    if n == 8:
+        print(
+            'ŷ = b0 + b1 * x1 + b2 * x2 + b3 * x3 + b12 * x1 * x2 + b13 * x1 * x3 + b23 * x2 * x3 + b123 * x1 * x2 * x3'
+        )
+        norm_x = [
+            [+1, -1, -1, -1],
+            [+1, -1, +1, +1],
+            [+1, +1, -1, +1],
+            [+1, +1, +1, -1],
+            [+1, -1, -1, +1],
+            [+1, -1, +1, -1],
+            [+1, +1, -1, -1],
+            [+1, +1, +1, +1]
+        ]
 
-def cohren(y_array, y_average_array):
-    dispersion_array = dispersion(y_array, y_average_array)
-    max_dispersion = max(dispersion_array)
-    Gp = max_dispersion/sum(dispersion_array)
-    fisher = table_fisher(0.95, N, m, 1)
-    Gt = fisher/(fisher+(m-1)-2)
-    return Gp < Gt
+        x = [
+            [1, x1_min, x2_min, x3_min],
+            [1, x1_min, x2_max, x3_max],
+            [1, x1_max, x2_min, x3_max],
+            [1, x1_max, x2_max, x3_min],
+            [1, x1_min, x2_min, x3_max],
+            [1, x1_min, x2_max, x3_min],
+            [1, x1_max, x2_min, x3_min],
+            [1, x1_max, x2_max, x3_max]
+        ]
 
+        append_to_list_x(norm_x, variant=1)
+        append_to_list_x(x, variant=1)
 
-def calcxi(n, listx):
-    sumxi = 0
+    if n == 4:
+        print('ŷ = b0 + b1 * x1 + b2 * x2 + b3 * x3')
+        norm_x = [
+            [+1, -1, -1, -1],
+            [+1, -1, +1, +1],
+            [+1, +1, -1, +1],
+            [+1, +1, +1, -1],
+        ]
+        x = [
+            [1, x1_min, x2_min, x3_min],
+            [1, x1_min, x2_max, x3_max],
+            [1, x1_max, x2_min, x3_max],
+            [1, x1_max, x2_max, x3_min],
+        ]
+    if n == 14:
+        y = [[round(sum([koefs[j] * i[j] for j in range(len(koefs))]) + random() * 10 - 5, 3) for k in range(m)] for i
+             in x]
+    else:
+        y = np.random.randint(y_min, y_max, size=(n, m))
+    # y = np.random.randint(y_min, y_max, size=(n, m))
+    y_av = list(np.average(y, axis=1))
+
+    for i in range(len(y_av)):
+        y_av[i] = round(y_av[i], 3)
+
+    if n == 14:
+        t = PrettyTable(['N', 'norm_x_0', 'norm_x_1', 'norm_x_2', 'norm_x_3', 'norm_x_1_x_2', 'norm_x_1_x_3',
+                         'norm_x_2_x_3', 'norm_x_1_x_2_x_3', 'norm_x_1_x_1', 'norm_x_2_x_2', 'norm_x_3_x_3', 'x_0',
+                         'x_1', 'x_2', 'x_3', 'x_1_x_2', 'x_1_x_3', 'x_2_x_3', 'x_1_x_2_x_3', 'x_1_x_1', 'x_2_x_2',
+                         'x_3_x_3'] + [f'y_{i + 1}' for i in range(m)] + ['y_av'])
+
+    if n == 8:
+        t = PrettyTable(['N', 'norm_x_0', 'norm_x_1', 'norm_x_2', 'norm_x_3', 'norm_x_1_x_2', 'norm_x_1_x_3',
+                         'norm_x_2_x_3', 'norm_x_1_x_2_x_3', 'x_0', 'x_1', 'x_2', 'x_3', 'x_1_x_2', 'x_1_x_3',
+                         'x_2_x_3', 'x_1_x_2_x_3'] + [f'y_{i + 1}' for i in range(m)] + ['y_av'])
+    if n == 4:
+        t = PrettyTable(
+            ['N', 'norm_x_0', 'norm_x_1', 'norm_x_2', 'norm_x_3', 'x_0', 'x_1', 'x_2', 'x_3'] +
+            [f'y_{i + 1}' for i in range(m)] + ['y_av'])
+
     for i in range(n):
-        lsumxi = 1
-        for j in range(len(listx)):
-            lsumxi *= listx[j][i]
-        sumxi += lsumxi
-    return sumxi
+        t.add_row([i + 1] + list(norm_x[i]) + list(x[i]) + list(y[i]) + [y_av[i]])
+    print(t)
+
+    m_ij = []
+    for i in range(len(x[0])):
+        m_ij.append([round(sum([x[k][i] * x[k][j] for k in range(len(x))]) / 14, 3) for j in range(len(x[i]))])
+
+    k_i = []
+    for i in range(len(x[0])):
+        a = sum(y_av[j] * x[j][i] for j in range(len(x))) / 14
+        k_i.append(a)
+
+    det = np.linalg.det(m_ij)
+    det_i = [np.linalg.det(replace_column(m_ij, i, k_i)) for i in range(len(k_i))]
+
+    b_i = [round(i / det, 3) for i in det_i]
+    if n == 14:
+        print(
+            f"\nThe naturalized regression equation: "
+            f"y = {b_i[0]:.5f} + {b_i[1]:.5f} * x1 + {b_i[2]:.5f} * x2 + "
+            f"{b_i[3]:.5f} * x3 + {b_i[4]:.5f} * x1 * x2 + "
+            f"{b_i[5]:.5f} * x1 * x3 + {b_i[6]:.5f} * x2 * x3 + {b_i[7]:.5f} * x1 * x2 * x3 + {b_i[8]:.5f} * x1 * x1 + "
+            f"{b_i[9]:.5f} * x2 * x2 + {b_i[10]:.5f} * x3 * x3")
+    if n == 8:
+        print(
+            f"\nThe naturalized regression equation: "
+            f"y = {b_i[0]:.5f} + {b_i[1]:.5f} * x1 + {b_i[2]:.5f} * x2 + "
+            f"{b_i[3]:.5f} * x3 + {b_i[4]:.5f} * x1 * x2 + "
+            f"{b_i[5]:.5f} * x1 * x3 + {b_i[6]:.5f} * x2 * x3 + {b_i[7]:.5f} * x1 * x2 * x3")
+    if n == 4:
+        print(
+            f"\nThe naturalized regression equation: "
+            f"y = {b_i[0]:.5f} + {b_i[1]:.5f} * x1 + {b_i[2]:.5f} * x2 + {b_i[3]:.5f} * x3\n")
+
+    check_i = [round(sum(b_i[j] * i[j] for j in range(len(b_i))), 3) for i in x]
+    for i in range(len(check_i)):
+        print(f'ŷ{i + 1} = {check_i[i]}, y_av{i + 1} = {y_av[i]}')
+
+    print("\n[ Kohren's test ]")
+    f_1 = m - 1
+    f_2 = n
+    s_i = [sum([(i - y_av[j]) ** 2 for i in y[j]]) / m for j in range(len(y))]
+    g_p = max(s_i) / sum(s_i)
+
+    table = {2: 0.75, 3: 0.6841, 4: 0.6287, 5: 0.5892, 6: 0.5598, 7: 0.5365, 8: 0.5175, 9: 0.5017, 10: 0.4884,
+             range(11, 17): 0.4366, range(17, 37): 0.3720, range(37, 2 ** 100): 0.3093}
+    g_t = get_value(table, m)
+
+    if g_p < g_t:
+        print(f"The variance is homogeneous: Gp = {g_p:.5} < Gt = {g_t}")
+    else:
+        print(f"The variance is not homogeneous Gp = {g_p:.5} > Gt = {g_t}\nStart again with m = m + 1 = {m + 1}")
+        return main(m=m + 1, n=n)
+
+    print("\n[ Student's test ]")
+    s2_b = sum(s_i) / n
+    s2_beta_s = s2_b / (n * m)
+    s_beta_s = sqrt(s2_beta_s)
+    beta_i = [sum([norm_x[i][j] * y_av[i] for i in range(len(norm_x))]) / n for j in range(len(norm_x[0]))]
+    beta_i = [round(i, 3) for i in beta_i]
+
+    t = [abs(i) / s_beta_s for i in beta_i]
+    if n == 14:
+        beta_i = b_i
+    f_3 = f_1 * f_2
+    t_table = {4: 2.776, 5: 2.571, 6: 2.447, 7: 2.365, 8: 2.306, 9: 2.262, 10: 2.228, 11: 2.201, 12: 2.179, 13: 2.160,
+               14: 2.145, 15: 2.131, 16: 2.120, 17: 2.110, 18: 2.101, 19: 2.093, 20: 2.086, 21: 2.08, 22: 2.074,
+               23: 2.069, 24: 2.064, range(25, 30): 2.06, range(30, 40): 2.042, range(40, 60): 2.021, range(60, 100): 2,
+               range(100, 2 ** 100): 1.96}
+    d = deepcopy(len(beta_i))
+    for i in range(len(t)):
+        if get_value(t_table, f_3) > t[i]:
+            beta_i[i] = 0
+            d -= 1
+    if n == d:
+        n = 8 if n == 4 else 14
+        print(f"n=d\nStart again with n = {n} and m = {m}")
+        return main(m=m, n=n)
+    if n == 14:
+        print(
+            f"\nThe naturalized simplified regression equation: "
+            f"y = {beta_i[0]:.5f} + {beta_i[1]:.5f} * x1 + "
+            f"{beta_i[2]:.5f} * x2 + {beta_i[3]:.5f} * x3 + {beta_i[4]:.5f} * x1 * x2 + "
+            f"{beta_i[5]:.5f} * x1 * x3 + {beta_i[6]:.5f} * x2 * x3 + {beta_i[7]:.5f} * x1 * x2 * x3 + "
+            f"{beta_i[8]:.5f} * x1 * x1 + {beta_i[9]:.5f} * x2 * x2 + {beta_i[10]:.5f} * x3 * x3")
+        check_i = [round(sum(beta_i[j] * i[j] for j in range(len(beta_i))), 3) for i in x]
+
+    if n == 8:
+        print(
+            f"\nThe normalized regression equation: "
+            f"y = {beta_i[0]:.5f} + {beta_i[1]:.5f} * x1 + {beta_i[2]:.5f} * x2 + "
+            f"{beta_i[3]:.5f} * x3 + {beta_i[4]:.5f} * x1 * x2 + "
+            f"{beta_i[5]:.5f} * x1 * x3 + {beta_i[6]:.5f} * x2 * x3 + {beta_i[7]:.5f} * x1 * x2 * x3")
+        check_i = [round(sum(beta_i[j] * i[j] for j in range(len(beta_i))), 3) for i in norm_x]
+
+    if n == 4:
+        print(
+            f"\nThe normalized regression equation: "
+            f"y = {beta_i[0]:.5f} + {beta_i[1]:.5f} * x1 + {beta_i[2]:.5f} * x2 + "
+            f"{beta_i[3]:.5f} * x3")
+        check_i = [round(sum(beta_i[j] * i[j] for j in range(len(beta_i))), 3) for i in norm_x]
+
+    for i in range(len(check_i)):
+        print(f'ŷ{i + 1} = {check_i[i]}, y_av{i + 1} = {y_av[i]}')
+
+    print("\n[ Fisher's test ]")
+    f_4 = n - d
+    s2_ad = m / f_4 * sum([(check_i[i] - y_av[i]) ** 2 for i in range(len(y_av))])
+    f_p = s2_ad / s2_b
+    f_t = {
+        1: [164.4, 199.5, 215.7, 224.6, 230.2, 234, 235.8, 237.6],
+        2: [18.5, 19.2, 19.2, 19.3, 19.3, 19.3, 19.4, 19.4],
+        3: [10.1, 9.6, 9.3, 9.1, 9, 8.9, 8.8, 8.8],
+        4: [7.7, 6.9, 6.6, 6.4, 6.3, 6.2, 6.1, 6.1],
+        5: [6.6, 5.8, 5.4, 5.2, 5.1, 5, 4.9, 4.9],
+        6: [6, 5.1, 4.8, 4.5, 4.4, 4.3, 4.2, 4.2],
+        7: [5.5, 4.7, 4.4, 4.1, 4, 3.9, 3.8, 3.8],
+        8: [5.3, 4.5, 4.1, 3.8, 3.7, 3.6, 3.5, 3.5],
+        9: [5.1, 4.3, 3.9, 3.6, 3.5, 3.4, 3.3, 3.3],
+        10: [5, 4.1, 3.7, 3.5, 3.3, 3.2, 3.1, 3.1],
+        11: [4.8, 4, 3.6, 3.4, 3.2, 3.1, 3, 3],
+        12: [4.8, 3.9, 3.5, 3.3, 3.1, 3, 2.9, 2.9],
+        13: [4.7, 3.8, 3.4, 3.2, 3, 2.9, 2.8, 2.8],
+        14: [4.6, 3.7, 3.3, 3.1, 3, 2.9, 2.8, 2.7],
+        15: [4.5, 3.7, 3.3, 3.1, 2.9, 2.8, 2.7, 2.7, 2.7, 2.7, 2.6, 2.6],
+        16: [4.5, 3.6, 3.2, 3, 2.9, 2.7, 2.6, 2.6],
+        17: [4.5, 3.6, 3.2, 3, 2.8, 2.7, 2.5, 2.3],
+        18: [4.4, 3.6, 3.2, 2.9, 2.8, 2.7, 2.5, 2.3],
+        19: [4.4, 3.5, 3.1, 2.9, 2.7, 2.7, 2.4, 2.3],
+        range(20, 22): [4.4, 3.5, 3.1, 2.8, 2.7, 2.7, 2.4, 2.3],
+        range(22, 24): [4.3, 3.4, 3.1, 2.8, 2.7, 2.6, 2.4, 2.3],
+        range(24, 26): [4.3, 3.4, 3, 2.8, 2.6, 2.5, 2.3, 2.2],
+        range(26, 28): [4.2, 3.4, 3, 2.7, 2.6, 2.5, 2.3, 2.2],
+        range(28, 30): [4.2, 3.3, 3, 2.7, 2.6, 2.4, 2.3, 2.1],
+        range(30, 40): [4.2, 3.3, 3, 2.7, 2.6, 2.4, 2.3, 2.1, 2, 2, 2, 2],
+        range(40, 60): [4.1, 3.2, 2.9, 2.6, 2.5, 2.3, 2.2, 2, 1.9, 1.9, 1.9, 1.9],
+        range(60, 120): [4, 3.2, 2.8, 2.5, 2.4, 2.3, 2.1, 1.9, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8, 1.8],
+        range(120, 2 ** 100): [3.8, 3, 2.6, 2.4, 2.2, 2.1, 2, 2, 1.9, 1.9, 1.9, 1.8, 1.8]
+    }
+    if n == 8:
+        count_vzaemodiya++
+    if n == 14:
+        count_kvadr++
+    if f_p > get_value(f_t, f_3)[f_4]:
+        n = 8 if n == 4 else 14         
+        print(
+            f"fp = {f_p} > ft = {get_value(f_t, f_3)[f_4]}.\n"
+            f"The mathematical model is not adequate to the experimental data\n"
+            f"Start again with m = {m} and n = {n}")
+        return main(m=m, n=n)
+    else:
+        print(
+            f"fP = {f_p} < fT = {get_value(f_t, f_3)[f_4]}.\n"
+            f"The mathematical model is adequate to the experimental data\n")
 
 
-def calcb(lmaty):
-    a00 = [[], [xnatmod[0]], [xnatmod[1]], [xnatmod[2]], [xnatmod[0], xnatmod[1]], [xnatmod[0], xnatmod[2]],
-           [xnatmod[1], xnatmod[2]], [xnatmod[0], xnatmod[1], xnatmod[2]], [xnatmod[0], xnatmod[0]],
-           [xnatmod[1], xnatmod[1]], [xnatmod[2], xnatmod[2]]]
-    a0 = [15]
-    for i in range(10):
-        a0.append(calcxi(N, a00[i + 1]))
-    a1 = [calcxi(N, a00[i] + a00[1]) for i in range(len(a00))]
-    a2 = [calcxi(N, a00[i] + a00[2]) for i in range(len(a00))]
-    a3 = [calcxi(N, a00[i] + a00[3]) for i in range(len(a00))]
-    a4 = [calcxi(N, a00[i] + a00[4]) for i in range(len(a00))]
-    a5 = [calcxi(N, a00[i] + a00[5]) for i in range(len(a00))]
-    a6 = [calcxi(N, a00[i] + a00[6]) for i in range(len(a00))]
-    a7 = [calcxi(N, a00[i] + a00[7]) for i in range(len(a00))]
-    a8 = [calcxi(N, a00[i] + a00[8]) for i in range(len(a00))]
-    a9 = [calcxi(N, a00[i] + a00[9]) for i in range(len(a00))]
-    a10 = [calcxi(N, a00[i] + a00[10]) for i in range(len(a00))]
-    a = numpy.array([[a0[0], a0[1], a0[2], a0[3], a0[4], a0[5], a0[6], a0[7], a0[8], a0[9], a0[10]],
-                     [a1[0], a1[1], a1[2], a1[3], a1[4], a1[5], a1[6], a1[7], a1[8], a1[9], a1[10]],
-                     [a2[0], a2[1], a2[2], a2[3], a2[4], a2[5], a2[6], a2[7], a2[8], a2[9], a2[10]],
-                     [a3[0], a3[1], a3[2], a3[3], a3[4], a3[5], a3[6], a3[7], a3[8], a3[9], a3[10]],
-                     [a4[0], a4[1], a4[2], a4[3], a4[4], a4[5], a4[6], a4[7], a4[8], a4[9], a4[10]],
-                     [a5[0], a5[1], a5[2], a5[3], a5[4], a5[5], a5[6], a5[7], a5[8], a5[9], a5[10]],
-                     [a6[0], a6[1], a6[2], a6[3], a6[4], a6[5], a6[6], a6[7], a6[8], a6[9], a6[10]],
-                     [a7[0], a7[1], a7[2], a7[3], a7[4], a7[5], a7[6], a7[7], a7[8], a7[9], a7[10]],
-                     [a8[0], a8[1], a8[2], a8[3], a8[4], a8[5], a8[6], a8[7], a8[8], a8[9], a8[10]],
-                     [a9[0], a9[1], a9[2], a9[3], a9[4], a9[5], a9[6], a9[7], a9[8], a9[9], a9[10]],
-                     [a10[0], a10[1], a10[2], a10[3], a10[4], a10[5], a10[6], a10[7], a10[8], a10[9],
-                      a10[10]]])
-    c0 = [calcxi(N, [lmaty])]
-    for i in range(len(a00) - 1):
-        c0.append(calcxi(N, a00[i + 1] + [lmaty]))
-    c = numpy.array([c0[0], c0[1], c0[2], c0[3], c0[4], c0[5], c0[6], c0[7], c0[8], c0[9], c0[10]])
-    b = numpy.linalg.solve(a, c)
-    return b
-
-
-def fisher(b_0, n, m, d, y_array, y_average_array):
-    if d == n:
-        return True
-    dispersion_array = dispersion(y_array, y_average_array)
-    sad = sum([(sum([combination_mul(x[i])[j] * b_0[j] for j in range(11)]) - y_average_array[i]) ** 2 for i in range(n)])
-    sad = sad * m / (n - d)
-    fp = sad / sum(dispersion_array) / n
-    ft = table_fisher(0.95, n, m, d)
-    return fp < ft
-
-
-def student(y_array, y_average_array):
-    general_dispersion = sum(dispersion(y_array, y_average_array)) / N
-    statistic_dispersion = math.sqrt(general_dispersion / (N*m))
-    beta = []
-    for i in range(N):
-        b = 0
-        for j in range(3):
-            b += y_average_array[i] * xn[i][j]
-        beta.append(b / N)
-    ts = [abs(beta[i]) / statistic_dispersion for i in range(N)]
-    tt = table_student(0.95, N, m)
-    st = [n > tt for n in ts]
-    return st
-
-
-N = 15
-m = 2
-l = 1.75
-
-x1min = -25
-x1max = -5
-x01 = (x1min + x1max) / 2
-xl1 = l*(x1max-x01)+x01
-
-x2min = 25
-x2max = 45
-x02 = (x2min + x2max) / 2
-xl2 = l*(x2max-x02)+x02
-
-x3min = 25
-x3max = 30
-x03 = (x3min + x3max) / 2
-xl3 = l*(x3max-x03)+x03
-
-xn = [
-    [-1, -1, -1],
-    [-1, 1, 1],
-    [1, -1, 1],
-    [1, 1, -1],
-    [-1, -1, 1],
-    [-1, 1, -1],
-    [1, -1, -1],
-    [1, 1, 1],
-    [-l, 0, 0],
-    [l, 0, 0],
-    [0, -l, 0],
-    [0, l, 0],
-    [0, 0, -l],
-    [0, 0, l],
-    [0, 0, 0]
-]
-
-x = [
-    [x1min, x2min, x3min],
-    [x1min, x2min, x3max],
-    [x1min, x2max, x3min],
-    [x1min, x2max, x3max],
-    [x1max, x2min, x3min],
-    [x1max, x2min, x3max],
-    [x1max, x2max, x3min],
-    [x1max, x2max, x3max],
-    [-xl1, x02, x03],
-    [xl1, x02, x03],
-    [x01, -xl2, x03],
-    [x01, xl2, x03],
-    [x01, x02, -xl3],
-    [x01, x02, xl3],
-    [x01, x02, x03]
-]
-
-f_x1_x2_x3 = [
-    6.6, #початковий елемент
-    1,  #x1
-    7.5, #x2
-    6.3, #x3
-    3.1, #x1x2
-    0.9, #x1x3
-    4, #x2x3
-    1.4, #x1x2x3
-    0.5, #x1^2
-    1, #x2^2
-    0.5  #x3^2
-]
-
-condition_cohren = False
-condition_fisher = False
-
-
-while not condition_fisher:
-    while not condition_cohren:
-        print(f'm={m}')
-        xnatmod = [[x[i][j] for i in range(N)] for j in range(3)]
-        y = geny(N, m, f_x1_x2_x3)
-        y_average = [sum(y[i])/m for i in range(N)]
-        condition_cohren = cohren(y, y_average)
-        if not condition_cohren:
-            m += 1
-    b0 = calcb(y_average)
-    print('Коефіцієнти регресії:')
-    print(b0)
-    d = sum(student(y, y_average))
-    print(f'Кількість значущих коефіцієнтів:{d}')
-    condition_fisher = fisher(b0, N, m, d, y, y_average)
-    if condition_fisher:
-        print('Отримана математична модель є адекватною відносно експериментальних даних')
+# n = 14 because if you start with 4 then it will not reach 14
+for i in range(100):
+    main(m=2, n=14)
+    
+print("В ефекті взаємодії: ", count_vzaemodiya)
+print("З квадратичними членами: " , count_kvadr)
